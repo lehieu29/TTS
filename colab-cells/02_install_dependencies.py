@@ -71,7 +71,7 @@ else:
     print("Cloning repository...")
     subprocess.run([
         "git", "clone",
-        "https://github.com/nguyenthienhy/F5-TTS-Vietnamese.git",
+        "https://github.com/lehieu29/TTS.git",
         repo_path
     ], check=True)
 

@@ -407,7 +407,7 @@ Runtime: Google Colab (Free or Pro)
 ### External:
 - Memory Bank: `../memory-bank/` - Complete docs
 - F5-TTS Repo: [GitHub](https://github.com/SWivid/F5-TTS)
-- Vietnamese Repo: [GitHub](https://github.com/nguyenthienhy/F5-TTS-Vietnamese)
+- Vietnamese Repo: [GitHub](https://github.com/lehieu29/TTS)
 
 ---
 

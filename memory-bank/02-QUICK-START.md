@@ -26,7 +26,7 @@ Hướng dẫn này giúp bạn setup và chạy inference nhanh nhất.
 ### Step 1: Clone repository
 
 ```bash
-git clone https://github.com/nguyenthienhy/F5-TTS-Vietnamese.git
+git clone https://github.com/lehieu29/TTS.git
 cd F5-TTS-Vietnamese
 ```
 

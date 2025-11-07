@@ -545,7 +545,7 @@ Optimization:
 ### Q: Cộng đồng Vietnamese TTS ở đâu?
 
 **A:**
-- GitHub Issues: [F5-TTS-Vietnamese](https://github.com/nguyenthienhy/F5-TTS-Vietnamese)
+- GitHub Issues: [F5-TTS-Vietnamese](https://github.com/lehieu29/TTS)
 - Discord/Telegram: (TBD)
 - Facebook Groups: AI Vietnam communities
 

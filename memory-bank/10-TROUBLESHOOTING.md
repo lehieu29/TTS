@@ -512,7 +512,7 @@ ls -lh ckpts/
 
 ### Where to Ask
 
-1. **GitHub Issues**: https://github.com/nguyenthienhy/F5-TTS-Vietnamese/issues
+1. **GitHub Issues**: https://github.com/lehieu29/TTS/issues
 2. **Original F5-TTS Repo**: https://github.com/SWivid/F5-TTS
 3. **Stack Overflow**: Tag với `tts`, `pytorch`
 

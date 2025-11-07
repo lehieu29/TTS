@@ -6,7 +6,7 @@
 
 ### Nguồn gốc
 - **Base Project:** [SWivid/F5-TTS](https://github.com/SWivid/F5-TTS)
-- **Vietnamese Adaptation:** [nguyenthienhy/F5-TTS-Vietnamese](https://github.com/nguyenthienhy/F5-TTS-Vietnamese)
+- **Vietnamese Adaptation:** [lehieu29/TTS](https://github.com/lehieu29/TTS)
 - **Demo:** https://huggingface.co/spaces/hynt/F5-TTS-Vietnamese-100h
 
 ---
@@ -152,7 +152,7 @@ F5-TTS-Vietnamese/
 
 ### Resources
 - Original Repo: https://github.com/SWivid/F5-TTS
-- Vietnamese Repo: https://github.com/nguyenthienhy/F5-TTS-Vietnamese
+- Vietnamese Repo: https://github.com/lehieu29/TTS
 - HuggingFace Model: https://huggingface.co/SWivid/F5-TTS
 
 ---
