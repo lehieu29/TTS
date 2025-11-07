@@ -122,6 +122,49 @@ for speaker in speakers:
             f.write(f"{token}\n")
     
     print(f"   ✅ Extended vocab saved: {len(new_vocab)} tokens")
+    
+    # 🔴 CRITICAL VALIDATION: Check vocab size
+    if len(new_vocab) < 50:
+        print(f"\n{'='*70}")
+        print(f"❌ CRITICAL ERROR: Vocab size too small!")
+        print(f"{'='*70}")
+        print(f"   Expected for Vietnamese: 100-200 characters")
+        print(f"   Got: {len(new_vocab)} characters")
+        print(f"   Dataset vocab: {len(dataset_tokens)} characters")
+        print(f"\n⚠️  This indicates a serious problem with text processing:")
+        print(f"   1. Transcription failed")
+        print(f"   2. Text normalization removed too much")
+        print(f"   3. Unicode encoding issue (check NFD vs NFC)")
+        print(f"\n💡 Please check Cell 07 output and transcriptions.")
+        print(f"{'='*70}")
+        sys.exit(1)
+
+# ------------------------------------------------------------------------------
+# 2.5. Fix prepare_csv_wavs.py vocab path issue
+# ------------------------------------------------------------------------------
+print("\n" + "="*70)
+print("🔧 Setting up vocab for prepare_csv_wavs.py...")
+print("="*70)
+
+# The prepare_csv_wavs.py script looks for vocab at a hardcoded path
+# We need to copy the extended vocab from speaker_training to that location
+script_expected_vocab_dir = "/content/F5-TTS-Vietnamese/data/your_training_dataset"
+script_expected_vocab_path = f"{script_expected_vocab_dir}/vocab.txt"
+
+os.makedirs(script_expected_vocab_dir, exist_ok=True)
+
+# Use the first speaker's extended vocab (already created in step 2)
+first_speaker = list(speakers)[0]
+training_dir = f"/content/data/{first_speaker}_training"
+speaker_vocab = f"{training_dir}/vocab.txt"
+
+if os.path.exists(speaker_vocab):
+    shutil.copy(speaker_vocab, script_expected_vocab_path)
+    print(f"✅ Copied extended vocab to: {script_expected_vocab_path}")
+    print(f"   Source: {speaker_vocab}")
+else:
+    print(f"❌ ERROR: Vocab not found at {speaker_vocab}")
+    sys.exit(1)
 
 # ------------------------------------------------------------------------------
 # 3. Run Feature Extraction
@@ -157,9 +200,15 @@ for speaker in speakers:
     )
     
     if result.returncode != 0:
-        print(f"❌ Feature extraction failed for {speaker}!")
+        print(f"\n{'='*70}")
+        print(f"❌ CRITICAL ERROR: Feature extraction failed for {speaker}!")
+        print(f"{'='*70}")
+        print(f"Error output:")
         print(result.stderr)
-        continue
+        print(f"\n💡 This prevents proper training data preparation.")
+        print(f"   Please check the error above and fix the issue.")
+        print(f"{'='*70}")
+        sys.exit(1)
     
     # Print output
     print(result.stdout)
@@ -179,11 +228,27 @@ for speaker in speakers:
         # Show file sizes
         arrow_size = os.path.getsize(f"{training_dir}/raw.arrow") / (1024**2)
         print(f"   raw.arrow: {arrow_size:.1f} MB")
+        
+        # 🔴 CRITICAL VALIDATION: Check arrow file size
+        if arrow_size < 0.1:
+            print(f"\n{'='*70}")
+            print(f"❌ CRITICAL ERROR: raw.arrow file too small!")
+            print(f"{'='*70}")
+            print(f"   Size: {arrow_size:.2f} MB (expected: >5 MB for 30 min audio)")
+            print(f"   This indicates feature extraction failed or no data.")
+            print(f"{'='*70}")
+            sys.exit(1)
     else:
-        print(f"   ❌ Some output files missing!")
+        print(f"\n{'='*70}")
+        print(f"❌ CRITICAL ERROR: Required output files missing!")
+        print(f"{'='*70}")
         for f in required_files:
             exists = "✅" if os.path.exists(f) else "❌"
-            print(f"      {exists} {Path(f).name}")
+            print(f"   {exists} {Path(f).name}")
+        print(f"\n💡 Feature extraction did not complete successfully.")
+        print(f"   Please check the error above and re-run the cell.")
+        print(f"{'='*70}")
+        sys.exit(1)
 
 # ------------------------------------------------------------------------------
 # 4. Download Pretrained Model
@@ -316,15 +381,25 @@ print(f"""
 for speaker in speakers:
     training_dir = f"/content/data/{speaker}_training"
     
+    # Verify files exist before reading
+    duration_file = f"{training_dir}/duration.json"
+    vocab_file = f"{training_dir}/vocab.txt"
+    
+    if not os.path.exists(duration_file):
+        print(f"\n⚠️  WARNING: Cannot display summary for {speaker}")
+        print(f"   Missing file: duration.json")
+        print(f"   Feature extraction may have failed.")
+        continue
+    
     # Count files
     wav_count = len(list(Path(f"{training_dir}/wavs").glob("*.wav")))
     
     # Get vocab size
-    with open(f"{training_dir}/vocab.txt", 'r') as f:
+    with open(vocab_file, 'r') as f:
         vocab_size = len(f.readlines())
     
     # Get duration
-    with open(f"{training_dir}/duration.json", 'r') as f:
+    with open(duration_file, 'r') as f:
         duration_data = json.load(f)
         total_duration = sum(duration_data['duration']) / 60  # minutes
     
@@ -343,6 +418,25 @@ for speaker in speakers:
         ✅ raw.arrow
         ✅ duration.json
 """)
+    
+    # 🟠 WARNING: Check if duration is too low
+    if total_duration > 0 and total_duration < 5:
+        print(f"\n{'='*70}")
+        print(f"⚠️  WARNING: Very low total duration for {speaker}!")
+        print(f"{'='*70}")
+        print(f"   Expected: >10 minutes for quality training")
+        print(f"   Got: {total_duration:.1f} minutes")
+        print(f"   Original audio was likely much longer.")
+        print(f"\n   Possible causes:")
+        print(f"   1. VAD filter too strict (Cell 06)")
+        print(f"   2. Transcription failures (Cell 07)")
+        print(f"   3. Feature extraction issues")
+        print(f"{'='*70}")
+        
+        proceed = input("\nContinue with this small dataset? (y/n, default=n): ").strip().lower()
+        if proceed != 'y':
+            print("Stopping. Please check previous cells.")
+            sys.exit(1)
 
 print(f"""
 📝 Next Steps:
