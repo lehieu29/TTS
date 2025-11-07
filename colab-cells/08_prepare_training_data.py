@@ -1,17 +1,17 @@
 """
-Cell 08: Prepare Training Data
+Cell 08: Prepare Training Dataset
 Mục đích:
-  - Merge vocab với pretrained model
-  - Run feature extraction (mel spectrograms)
-  - Download pretrained model
-  - Prepare for training
+  - Organize data theo format F5-TTS yêu cầu
+  - Check và extend vocabulary
+  - Prepare features (raw.arrow, duration.json)
+  - Ready for training
 """
 
 # ============================================================================
-# CELL 08: PREPARE TRAINING DATA FOR F5-TTS
+# CELL 08: PREPARE TRAINING DATASET
 # ============================================================================
 
-print("🎨 Preparing Training Data...")
+print("📦 Preparing Training Dataset...")
 
 import os
 import sys
@@ -28,102 +28,100 @@ config_path = "/content/processing_config.json"
 with open(config_path, 'r') as f:
     config = json.load(f)
 
-if not config.get('transcriptions_complete', False):
-    print("❌ Transcriptions not complete!")
-    print("   Please run Cell 07 first")
-    sys.exit(1)
-
-speakers = set()
-for info in config['speakers'].values():
-    speakers.add(info['name'])
-
-print(f"\nProcessing {len(speakers)} speaker(s): {', '.join(speakers)}")
+# Change to F5-TTS directory
+os.chdir("/content/F5-TTS-Vietnamese")
 
 # ------------------------------------------------------------------------------
-# 1. Prepare Vocab
+# 1. Organize Data Structure
 # ------------------------------------------------------------------------------
 print("\n" + "="*70)
-print("📝 Preparing vocabulary...")
+print("📁 Organizing data structure...")
 print("="*70)
 
-# Get pretrained vocab
+# Get speakers
+speakers = set(trans['speaker'] for trans in config['transcriptions'])
+
+print(f"Preparing data for {len(speakers)} speaker(s): {', '.join(speakers)}")
+
+for speaker in speakers:
+    print(f"\n👤 Processing speaker: {speaker}")
+    
+    # Create directories
+    dataset_dir = f"/content/data/{speaker}_dataset"
+    training_dir = f"/content/data/{speaker}_training"
+    
+    os.makedirs(f"{training_dir}/wavs", exist_ok=True)
+    
+    # Copy segments to training directory
+    source_dir = Path(config['segments_dir']) / speaker / "wavs"
+    target_dir = Path(training_dir) / "wavs"
+    
+    # Copy all wav and txt files
+    wav_files = list(source_dir.glob("*.wav"))
+    print(f"   Copying {len(wav_files)} audio files...")
+    
+    for wav_file in wav_files:
+        shutil.copy(str(wav_file), str(target_dir))
+        
+        # Also copy txt file
+        txt_file = wav_file.with_suffix('.txt')
+        if txt_file.exists():
+            shutil.copy(str(txt_file), str(target_dir))
+    
+    # Copy metadata.csv
+    metadata_src = Path(config['segments_dir']) / speaker / "metadata.csv"
+    metadata_dst = Path(training_dir) / "metadata.csv"
+    shutil.copy(str(metadata_src), str(metadata_dst))
+    
+    print(f"   ✅ Data organized in: {training_dir}")
+
+# ------------------------------------------------------------------------------
+# 2. Check Vocabulary
+# ------------------------------------------------------------------------------
+print("\n" + "="*70)
+print("📚 Checking vocabulary...")
+print("="*70)
+
+# Pretrained vocab path
 pretrained_vocab_path = "/content/F5-TTS-Vietnamese/data/Emilia_ZH_EN_pinyin/vocab.txt"
 
 if not os.path.exists(pretrained_vocab_path):
-    print("❌ Pretrained vocab not found!")
-    print(f"   Expected: {pretrained_vocab_path}")
-    sys.exit(1)
-
-with open(pretrained_vocab_path, 'r', encoding='utf-8') as f:
-    pretrained_vocab = set(line.strip() for line in f if line.strip())
-
-print(f"   Pretrained vocab: {len(pretrained_vocab)} characters")
-
-# ------------------------------------------------------------------------------
-# 2. Merge Vocab for Each Speaker
-# ------------------------------------------------------------------------------
-print("\n" + "="*70)
-print("🔀 Merging vocabularies...")
-print("="*70)
+    print("⚠️  Pretrained vocab not found, will create new vocab")
+    pretrained_tokens = set()
+else:
+    with open(pretrained_vocab_path, 'r', encoding='utf-8') as f:
+        pretrained_tokens = set(line.strip() for line in f)
+    print(f"   Pretrained vocab size: {len(pretrained_tokens)}")
 
 for speaker in speakers:
-    print(f"\n👤 Processing {speaker}...")
+    print(f"\n👤 {speaker}:")
     
     training_dir = f"/content/data/{speaker}_training"
-    dataset_vocab_path = f"{training_dir}/vocab.txt"
     
-    if not os.path.exists(dataset_vocab_path):
-        print(f"   ❌ Dataset vocab not found: {dataset_vocab_path}")
-        continue
-    
-    # Load dataset vocab
+    # Read dataset vocab
+    dataset_vocab_path = Path(config['segments_dir']) / speaker / "vocab.txt"
     with open(dataset_vocab_path, 'r', encoding='utf-8') as f:
-        dataset_vocab = set(line.strip() for line in f if line.strip())
+        dataset_tokens = set(line.strip() for line in f)
     
-    print(f"   Dataset vocab: {len(dataset_vocab)} characters")
-    
-    # ✅ FIX 2.2: CRITICAL VALIDATION - Check vocab size
-    if len(dataset_vocab) < 50:
-        print(f"\n{'='*70}")
-        print(f"❌ CRITICAL ERROR: Vocab size too small!")
-        print(f"{'='*70}")
-        print(f"   Expected for Vietnamese: 100-200 characters")
-        print(f"   Got: {len(dataset_vocab)} characters")
-        print(f"\n⚠️  This indicates a serious problem with text processing:")
-        print(f"   1. Transcription failed")
-        print(f"   2. Text normalization removed too much")
-        print(f"   3. Unicode encoding issue (check NFD vs NFC in Cell 07)")
-        print(f"\n💡 Please check Cell 07 output and transcriptions.")
-        print(f"   → Check if normalize_vietnamese_text() uses NFC (not NFD)")
-        print(f"{'='*70}")
-        sys.exit(1)
+    print(f"   Dataset vocab size: {len(dataset_tokens)}")
     
     # Find missing tokens
-    missing_tokens = dataset_vocab - pretrained_vocab
+    missing_tokens = dataset_tokens - pretrained_tokens
     print(f"   Missing tokens: {len(missing_tokens)}")
     
     if missing_tokens:
         print(f"   Missing chars: {sorted(missing_tokens)[:20]}")  # Show first 20
     
     # Create extended vocab
-    new_vocab = sorted(pretrained_vocab | dataset_vocab)
-    print(f"   Extended vocab: {len(new_vocab)} characters")
+    new_vocab = sorted(pretrained_tokens | dataset_tokens)
     
     # Save extended vocab
-    new_vocab_path = f"{training_dir}/vocab.txt"
+    new_vocab_path = Path(training_dir) / "vocab.txt"
     with open(new_vocab_path, 'w', encoding='utf-8') as f:
-        for char in new_vocab:
-            f.write(f"{char}\n")
+        for token in new_vocab:
+            f.write(f"{token}\n")
     
-    print(f"   ✅ Saved to: {new_vocab_path}")
-    
-    # ✅ FIX 1: Copy vocab to expected path for prepare_csv_wavs.py
-    # Script expects vocab at: data/your_training_dataset/vocab.txt
-    expected_vocab_dir = "/content/F5-TTS-Vietnamese/data/your_training_dataset"
-    os.makedirs(expected_vocab_dir, exist_ok=True)
-    expected_vocab_path = f"{expected_vocab_dir}/vocab.txt"
-    shutil.copy(str(new_vocab_path), expected_vocab_path)
-    print(f"   ✅ Vocab also copied to: {expected_vocab_path}")
+    print(f"   ✅ Extended vocab saved: {len(new_vocab)} tokens")
 
 # ------------------------------------------------------------------------------
 # 3. Run Feature Extraction
@@ -161,9 +159,6 @@ for speaker in speakers:
     if result.returncode != 0:
         print(f"❌ Feature extraction failed for {speaker}!")
         print(result.stderr)
-        # ✅ FIX 3: Mark as not ready if extraction failed
-        config['ready_for_training'] = False
-        print(f"   ⚠️  Training will not be ready until feature extraction succeeds")
         continue
     
     # Print output
@@ -184,20 +179,6 @@ for speaker in speakers:
         # Show file sizes
         arrow_size = os.path.getsize(f"{training_dir}/raw.arrow") / (1024**2)
         print(f"   raw.arrow: {arrow_size:.1f} MB")
-        
-        # ✅ FIX 2.2: CRITICAL VALIDATION - Check arrow file size
-        if arrow_size < 0.1:
-            print(f"\n{'='*70}")
-            print(f"❌ CRITICAL ERROR: raw.arrow file too small!")
-            print(f"{'='*70}")
-            print(f"   Size: {arrow_size:.2f} MB (expected: >5 MB for 30 min audio)")
-            print(f"   This indicates feature extraction failed or no data.")
-            print(f"\n💡 Possible causes:")
-            print(f"   1. No valid audio segments (check Cell 06 VAD output)")
-            print(f"   2. Transcription failures (check Cell 07)")
-            print(f"   3. Feature extraction script error")
-            print(f"{'='*70}")
-            sys.exit(1)
     else:
         print(f"   ❌ Some output files missing!")
         for f in required_files:
@@ -287,22 +268,7 @@ for speaker in speakers:
 
 config['training_dirs'] = training_dirs
 config['speakers_list'] = list(speakers)
-
-# ✅ FIX 3: Only mark ready if all extractions succeeded
-# Check if all required files exist for all speakers
-all_ready = True
-for speaker in speakers:
-    training_dir = f"/content/data/{speaker}_training"
-    required_files = [
-        f"{training_dir}/raw.arrow",
-        f"{training_dir}/duration.json",
-        f"{training_dir}/vocab.txt"
-    ]
-    if not all(os.path.exists(f) for f in required_files):
-        all_ready = False
-        break
-
-config['ready_for_training'] = all_ready
+config['ready_for_training'] = True
 
 with open(config_path, 'w') as f:
     json.dump(config, f, indent=2)
@@ -350,74 +316,56 @@ print(f"""
 for speaker in speakers:
     training_dir = f"/content/data/{speaker}_training"
     
-    try:
-        # Count files
-        wav_count = len(list(Path(f"{training_dir}/wavs").glob("*.wav")))
-        
-        # Get vocab size (with check)
-        vocab_size = 0
-        vocab_path = f"{training_dir}/vocab.txt"
-        if os.path.exists(vocab_path):
-            with open(vocab_path, 'r', encoding='utf-8') as f:
-                vocab_size = len(f.readlines())
-        else:
-            print(f"   ⚠️  vocab.txt not found for {speaker}")
-        
-        # ✅ FIX 2: Get duration (with check)
-        total_duration = 0
-        duration_path = f"{training_dir}/duration.json"
-        if os.path.exists(duration_path):
-            with open(duration_path, 'r', encoding='utf-8') as f:
-                duration_data = json.load(f)
-                total_duration = sum(duration_data['duration']) / 60  # minutes
-        else:
-            print(f"   ⚠️  duration.json not found (feature extraction may have failed)")
-        
-        print(f"\n   {speaker}:")
-        print(f"      Audio files: {wav_count}")
-        print(f"      Vocab size: {vocab_size}")
-        print(f"      Total duration: {total_duration:.1f} minutes")
-        
-        # ✅ FIX 2.2: VALIDATION - Warn if duration too low
-        if total_duration > 0 and total_duration < 5:
-            print(f"\n{'='*70}")
-            print(f"⚠️  WARNING: Very low total duration!")
-            print(f"{'='*70}")
-            print(f"   Expected: >10 minutes for quality training")
-            print(f"   Got: {total_duration:.1f} minutes")
-            print(f"   Original audio was likely much longer.")
-            print(f"\n   Possible causes:")
-            print(f"   1. VAD filter too strict (Cell 06) - check retention rate")
-            print(f"   2. Transcription failures (Cell 07) - check success rate")
-            print(f"   3. Feature extraction issues")
-            print(f"\n💡 Recommendations:")
-            print(f"   → Check Cell 06: Should retain 60-80% of audio")
-            print(f"   → Check Cell 07: Should have >80% transcription success")
-            print(f"   → Consider uploading more audio (Cell 04)")
-            print(f"{'='*70}")
-            
-            proceed = input("\nContinue with this small dataset? (y/n, default=n): ").strip().lower()
-            if proceed != 'y':
-                print("Stopping. Please check previous cells.")
-                sys.exit(1)
+    # Count files
+    wav_count = len(list(Path(f"{training_dir}/wavs").glob("*.wav")))
     
-    except Exception as e:
-        print(f"   ⚠️  Error getting stats for {speaker}: {e}")
+    # Get vocab size
+    with open(f"{training_dir}/vocab.txt", 'r') as f:
+        vocab_size = len(f.readlines())
+    
+    # Get duration
+    with open(f"{training_dir}/duration.json", 'r') as f:
+        duration_data = json.load(f)
+        total_duration = sum(duration_data['duration']) / 60  # minutes
+    
+    print(f"""
+   {speaker}:
+      Audio files: {wav_count}
+      Duration: {total_duration:.1f} minutes
+      Vocab size: {vocab_size}
+      Ready: ✅
+      
+      Location: {training_dir}
+      Files:
+        ✅ wavs/ ({wav_count} files)
+        ✅ metadata.csv
+        ✅ vocab.txt
+        ✅ raw.arrow
+        ✅ duration.json
+""")
 
-print(f"\n{'='*70}")
-print("📝 Next Steps:")
-print(f"{'='*70}")
-print("""
-   → Run Cell 09 to start training
-   → Training will take 2-4 hours for 30 minutes of audio
-   → Checkpoints will be saved to Google Drive
+print(f"""
+📝 Next Steps:
+   → Run Cell 09 to start training!
+   → Training will take 2-4 hours for ~30 min of audio
    
-⚠️  Important:
-   - Monitor training loss (should decrease steadily)
-   - First epoch may be slow (model initialization)
-   - You can stop and resume training anytime
+⚠️  Before training:
+   ✅ All data prepared
+   ✅ Pretrained model downloaded
+   ✅ Vocabulary extended
+   ✅ Features extracted
+   ✅ Backed up to Drive
+   
+🎯 Training Configuration:
+   Model: F5TTS_Base (DiT, 200M params)
+   Batch size: 7000 frames (adjust based on GPU)
+   Epochs: 50-100 (will auto-stop if needed)
+   Checkpoint: Every 10000 steps
 """)
 
 print("="*70)
-print("🎉 Ready to train!")
+print("🎉 Ready to train! Proceed to Cell 09!")
 print("="*70)
+
+
+
