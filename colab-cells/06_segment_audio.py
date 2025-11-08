@@ -41,6 +41,123 @@ else:
 speakers = config['speakers']
 
 # ------------------------------------------------------------------------------
+# 0. Check for existing backup in Drive
+# ------------------------------------------------------------------------------
+print("\n" + "="*70)
+print("🔍 Checking for existing segments backup in Drive...")
+print("="*70)
+
+segments_backup_dir = "/content/drive/MyDrive/F5TTS_Vietnamese/segments_backup"
+config_backup_path = "/content/drive/MyDrive/F5TTS_Vietnamese/segments_config_backup.json"
+use_backup = False
+
+if os.path.exists(segments_backup_dir) and os.path.exists(config_backup_path):
+    print(f"✅ Found backup in Drive: {segments_backup_dir}")
+    
+    # Check backup contents
+    import shutil
+    backup_size = sum(
+        os.path.getsize(os.path.join(dirpath, filename))
+        for dirpath, dirnames, filenames in os.walk(segments_backup_dir)
+        for filename in filenames
+    ) / (1024 * 1024)  # MB
+    
+    num_backup_files = sum(
+        len(filenames)
+        for dirpath, dirnames, filenames in os.walk(segments_backup_dir)
+    )
+    
+    print(f"📊 Backup info:")
+    print(f"   Files: {num_backup_files}")
+    print(f"   Size: {backup_size:.1f} MB")
+    print()
+    print("="*70)
+    print("💬 Bạn muốn sử dụng dữ liệu backup hay chạy lại?")
+    print("="*70)
+    print("   1. Sử dụng backup từ Drive (nhanh, tiết kiệm thời gian)")
+    print("   2. Chạy lại từ đầu (sẽ ghi đè backup cũ)")
+    print("="*70)
+    
+    user_choice = input("Lựa chọn của bạn (1/2, mặc định=1): ").strip()
+    
+    if user_choice == "2":
+        print("\n✅ Sẽ chạy lại từ đầu và tạo backup mới...")
+        use_backup = False
+    else:
+        print("\n✅ Sử dụng backup từ Drive...")
+        use_backup = True
+else:
+    print("📝 Không tìm thấy backup. Sẽ xử lý từ đầu...")
+    use_backup = False
+
+# ------------------------------------------------------------------------------
+# Restore from backup if user chose to
+# ------------------------------------------------------------------------------
+if use_backup:
+    print("\n" + "="*70)
+    print("📦 Restoring segments from Drive backup...")
+    print("="*70)
+    
+    import shutil
+    
+    # Create local segments directory
+    segments_dir = "/content/processed/segments"
+    os.makedirs(segments_dir, exist_ok=True)
+    
+    # Copy all files from backup to local
+    print("⏳ Copying files...")
+    if os.path.exists(segments_dir):
+        shutil.rmtree(segments_dir)
+    shutil.copytree(segments_backup_dir, segments_dir)
+    
+    # Load config from backup
+    with open(config_backup_path, 'r') as f:
+        backup_config = json.load(f)
+    
+    # Update current config with backup data
+    config['segments_dir'] = segments_dir
+    config['all_segments'] = backup_config.get('all_segments', {})
+    config['extracted_segments'] = backup_config.get('extracted_segments', [])
+    config['total_segments'] = backup_config.get('total_segments', 0)
+    
+    # Save updated config
+    with open(config_path, 'w') as f:
+        json.dump(config, f, indent=2)
+    
+    print(f"✅ Restored {config['total_segments']} segments from backup")
+    print(f"📁 Location: {segments_dir}")
+    
+    # Display statistics
+    print("\n" + "="*70)
+    print("📊 Restored Data Summary:")
+    print("="*70)
+    
+    speaker_stats = {}
+    for seg in config['extracted_segments']:
+        speaker = seg['speaker']
+        if speaker not in speaker_stats:
+            speaker_stats[speaker] = {'count': 0, 'duration': 0}
+        speaker_stats[speaker]['count'] += 1
+        speaker_stats[speaker]['duration'] += seg['duration']
+    
+    for speaker, stats in speaker_stats.items():
+        print(f"\n   {speaker}:")
+        print(f"      Segments: {stats['count']}")
+        print(f"      Duration: {stats['duration'] / 60:.1f} minutes")
+    
+    print("\n" + "="*70)
+    print("✅ RESTORE COMPLETE! Skipping to next cell...")
+    print("="*70)
+    print(f"📝 Next Steps:")
+    print(f"   Run Cell 07 to transcribe these segments")
+    print(f"   Or skip to Cell 08 if you already have transcriptions")
+    print("="*70)
+    
+    # Skip the rest of this cell
+    import sys
+    sys.exit(0)
+
+# ------------------------------------------------------------------------------
 # 1. Load Silero VAD Model
 # ------------------------------------------------------------------------------
 print("\n" + "="*70)
@@ -392,7 +509,7 @@ config['total_segments'] = len(extracted_segments)
 with open(config_path, 'w') as f:
     json.dump(config, f, indent=2)
 
-# Backup to Drive
+# Backup main config to Drive (separate from segments backup)
 drive_config = "/content/drive/MyDrive/F5TTS_Vietnamese/processing_config.json"
 with open(drive_config, 'w') as f:
     json.dump(config, f, indent=2)
@@ -497,6 +614,50 @@ if extracted_segments:
     print(f"   Duration: {sample_seg['duration']:.1f}s")
     from IPython.display import Audio, display
     display(Audio(sample_seg['path']))
+
+# ------------------------------------------------------------------------------
+# 7. Backup to Drive
+# ------------------------------------------------------------------------------
+print(f"\n{'='*70}")
+print(f"💾 Backing up segments to Drive...")
+print(f"{'='*70}")
+
+import shutil
+
+segments_backup_dir = "/content/drive/MyDrive/F5TTS_Vietnamese/segments_backup"
+config_backup_path = "/content/drive/MyDrive/F5TTS_Vietnamese/segments_config_backup.json"
+
+# Remove old backup if exists
+if os.path.exists(segments_backup_dir):
+    print("⏳ Removing old backup...")
+    shutil.rmtree(segments_backup_dir)
+
+# Copy segments to Drive
+print("⏳ Copying segments to Drive...")
+shutil.copytree(segments_dir, segments_backup_dir)
+
+# Save config backup
+backup_config = {
+    'segments_dir': segments_dir,
+    'all_segments': all_segments,
+    'extracted_segments': extracted_segments,
+    'total_segments': len(extracted_segments)
+}
+
+with open(config_backup_path, 'w') as f:
+    json.dump(backup_config, f, indent=2)
+
+# Calculate backup size
+backup_size = sum(
+    os.path.getsize(os.path.join(dirpath, filename))
+    for dirpath, dirnames, filenames in os.walk(segments_backup_dir)
+    for filename in filenames
+) / (1024 * 1024)  # MB
+
+print(f"✅ Backup complete!")
+print(f"   Location: {segments_backup_dir}")
+print(f"   Files: {len(extracted_segments)}")
+print(f"   Size: {backup_size:.1f} MB")
 
 print(f"\n{'='*70}")
 print(f"📝 Next Steps:")

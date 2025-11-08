@@ -78,6 +78,161 @@ with open(config_path, 'r') as f:
 extracted_segments = config['extracted_segments']
 
 # ------------------------------------------------------------------------------
+# 0. Check for existing transcriptions backup in Drive
+# ------------------------------------------------------------------------------
+print("\n" + "="*70)
+print("🔍 Checking for existing transcriptions backup in Drive...")
+print("="*70)
+
+transcriptions_backup_dir = "/content/drive/MyDrive/F5TTS_Vietnamese/transcriptions_backup"
+config_backup_path = "/content/drive/MyDrive/F5TTS_Vietnamese/transcriptions_config_backup.json"
+use_backup = False
+
+if os.path.exists(transcriptions_backup_dir) and os.path.exists(config_backup_path):
+    print(f"✅ Found transcriptions backup in Drive: {transcriptions_backup_dir}")
+    
+    # Check backup contents
+    num_backup_files = sum(
+        len(filenames)
+        for dirpath, dirnames, filenames in os.walk(transcriptions_backup_dir)
+    )
+    
+    backup_size = sum(
+        os.path.getsize(os.path.join(dirpath, filename))
+        for dirpath, dirnames, filenames in os.walk(transcriptions_backup_dir)
+        for filename in filenames
+    ) / (1024 * 1024)  # MB
+    
+    print(f"📊 Backup info:")
+    print(f"   Files: {num_backup_files}")
+    print(f"   Size: {backup_size:.1f} MB")
+    print()
+    print("="*70)
+    print("💬 Bạn muốn sử dụng transcriptions backup hay chạy lại?")
+    print("="*70)
+    print("   1. Sử dụng backup từ Drive (nhanh, tiết kiệm thời gian)")
+    print("   2. Chạy lại Whisper transcription (sẽ ghi đè backup cũ)")
+    print("="*70)
+    
+    user_choice = input("Lựa chọn của bạn (1/2, mặc định=1): ").strip()
+    
+    if user_choice == "2":
+        print("\n✅ Sẽ chạy lại Whisper transcription và tạo backup mới...")
+        use_backup = False
+    else:
+        print("\n✅ Sử dụng transcriptions backup từ Drive...")
+        use_backup = True
+else:
+    print("📝 Không tìm thấy transcriptions backup. Sẽ transcribe từ đầu...")
+    use_backup = False
+
+# ------------------------------------------------------------------------------
+# Restore from backup if user chose to
+# ------------------------------------------------------------------------------
+if use_backup:
+    print("\n" + "="*70)
+    print("📦 Restoring transcriptions from Drive backup...")
+    print("="*70)
+    
+    import shutil
+    
+    # Load config from backup
+    with open(config_backup_path, 'r') as f:
+        backup_config = json.load(f)
+    
+    print("⏳ Copying transcription files...")
+    
+    # Copy all transcription files (.txt, metadata.csv, vocab.txt)
+    segments_dir = config['segments_dir']
+    
+    # For each speaker in backup
+    for speaker_backup_dir in Path(transcriptions_backup_dir).iterdir():
+        if speaker_backup_dir.is_dir():
+            speaker_name = speaker_backup_dir.name
+            target_speaker_dir = Path(segments_dir) / speaker_name
+            
+            # Copy metadata.csv and vocab.txt
+            for file_name in ['metadata.csv', 'vocab.txt']:
+                backup_file = speaker_backup_dir / file_name
+                target_file = target_speaker_dir / file_name
+                if backup_file.exists():
+                    shutil.copy2(backup_file, target_file)
+                    print(f"   Copied {speaker_name}/{file_name}")
+            
+            # Copy all .txt files in wavs/
+            backup_wavs = speaker_backup_dir / 'wavs'
+            target_wavs = target_speaker_dir / 'wavs'
+            
+            if backup_wavs.exists():
+                for txt_file in backup_wavs.glob('*.txt'):
+                    target_txt = target_wavs / txt_file.name
+                    shutil.copy2(txt_file, target_txt)
+                
+                txt_count = len(list(backup_wavs.glob('*.txt')))
+                print(f"   Copied {txt_count} .txt files for {speaker_name}")
+    
+    # Update current config with backup data
+    config['transcriptions'] = backup_config.get('transcriptions', [])
+    config['failed_transcriptions'] = backup_config.get('failed_transcriptions', [])
+    config['metadata_files'] = backup_config.get('metadata_files', {})
+    config['total_transcribed'] = backup_config.get('total_transcribed', 0)
+    
+    # Save updated config
+    with open(config_path, 'w') as f:
+        json.dump(config, f, indent=2)
+    
+    # Also backup to main drive config
+    drive_config = "/content/drive/MyDrive/F5TTS_Vietnamese/processing_config.json"
+    with open(drive_config, 'w') as f:
+        json.dump(config, f, indent=2)
+    
+    print(f"\n✅ Restored {config['total_transcribed']} transcriptions from backup")
+    
+    # Display statistics
+    print("\n" + "="*70)
+    print("📊 Restored Transcriptions Summary:")
+    print("="*70)
+    
+    # Group by speaker
+    speaker_stats = {}
+    for trans in config['transcriptions']:
+        speaker = trans['speaker']
+        if speaker not in speaker_stats:
+            speaker_stats[speaker] = {'count': 0}
+        speaker_stats[speaker]['count'] += 1
+    
+    for speaker, stats in speaker_stats.items():
+        print(f"\n   {speaker}:")
+        print(f"      Transcriptions: {stats['count']}")
+        
+        # Count vocab size
+        vocab_path = Path(config['segments_dir']) / speaker / 'vocab.txt'
+        if vocab_path.exists():
+            with open(vocab_path, 'r', encoding='utf-8') as f:
+                vocab_size = len(f.readlines())
+            print(f"      Vocabulary: {vocab_size} characters")
+    
+    # Show sample transcriptions
+    print(f"\n📝 Sample Transcriptions:")
+    for trans in config['transcriptions'][:3]:
+        filename = Path(trans['audio_path']).name
+        text = trans['text']
+        print(f"   {filename}")
+        print(f"   → \"{text}\"")
+        print()
+    
+    print("\n" + "="*70)
+    print("✅ RESTORE COMPLETE! Skipping to next cell...")
+    print("="*70)
+    print(f"📝 Next Steps:")
+    print(f"   Run Cell 08 to prepare final training dataset")
+    print("="*70)
+    
+    # Skip the rest of this cell
+    import sys
+    sys.exit(0)
+
+# ------------------------------------------------------------------------------
 # 1. Load Whisper Model
 # ------------------------------------------------------------------------------
 print("\n" + "="*70)
@@ -385,6 +540,82 @@ print(f"""
    - Empty or short transcriptions filtered out
    - Ready for training pipeline
 """)
+
+# ------------------------------------------------------------------------------
+# 8. Backup Transcriptions to Drive
+# ------------------------------------------------------------------------------
+print("="*70)
+print("💾 Backing up transcriptions to Drive...")
+print("="*70)
+
+import shutil
+
+transcriptions_backup_dir = "/content/drive/MyDrive/F5TTS_Vietnamese/transcriptions_backup"
+config_backup_path = "/content/drive/MyDrive/F5TTS_Vietnamese/transcriptions_config_backup.json"
+
+# Remove old backup if exists
+if os.path.exists(transcriptions_backup_dir):
+    print("⏳ Removing old backup...")
+    shutil.rmtree(transcriptions_backup_dir)
+
+# Create backup directory
+os.makedirs(transcriptions_backup_dir, exist_ok=True)
+
+print("⏳ Copying transcription files to Drive...")
+
+# For each speaker, backup .txt files, metadata.csv, and vocab.txt
+for speaker, trans_list in speaker_transcriptions.items():
+    speaker_dir = Path(config['segments_dir']) / speaker
+    speaker_backup_dir = Path(transcriptions_backup_dir) / speaker
+    
+    # Create speaker backup directory structure
+    (speaker_backup_dir / 'wavs').mkdir(parents=True, exist_ok=True)
+    
+    # Copy metadata.csv and vocab.txt
+    for file_name in ['metadata.csv', 'vocab.txt']:
+        src_file = speaker_dir / file_name
+        dst_file = speaker_backup_dir / file_name
+        if src_file.exists():
+            shutil.copy2(src_file, dst_file)
+    
+    # Copy all .txt files
+    wavs_dir = speaker_dir / 'wavs'
+    backup_wavs_dir = speaker_backup_dir / 'wavs'
+    
+    txt_files = list(wavs_dir.glob('*.txt'))
+    for txt_file in txt_files:
+        dst_txt = backup_wavs_dir / txt_file.name
+        shutil.copy2(txt_file, dst_txt)
+    
+    print(f"   Backed up {speaker}: {len(txt_files)} .txt files + metadata + vocab")
+
+# Save config backup
+backup_config = {
+    'transcriptions': transcriptions,
+    'failed_transcriptions': failed_transcriptions,
+    'metadata_files': metadata_files,
+    'total_transcribed': len(transcriptions)
+}
+
+with open(config_backup_path, 'w') as f:
+    json.dump(backup_config, f, indent=2)
+
+# Calculate backup size
+backup_size = sum(
+    os.path.getsize(os.path.join(dirpath, filename))
+    for dirpath, dirnames, filenames in os.walk(transcriptions_backup_dir)
+    for filename in filenames
+) / (1024 * 1024)  # MB
+
+num_backup_files = sum(
+    len(filenames)
+    for dirpath, dirnames, filenames in os.walk(transcriptions_backup_dir)
+)
+
+print(f"\n✅ Backup complete!")
+print(f"   Location: {transcriptions_backup_dir}")
+print(f"   Files: {num_backup_files}")
+print(f"   Size: {backup_size:.1f} MB")
 
 print("="*70)
 print("🎉 Ready to proceed to Cell 08!")
