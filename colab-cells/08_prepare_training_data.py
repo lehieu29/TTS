@@ -270,18 +270,34 @@ for speaker in speakers:
     print(f"   Missing tokens: {len(missing_tokens)}")
     
     if missing_tokens:
-        print(f"   Missing chars: {sorted(missing_tokens)[:20]}")  # Show first 20
+        print(f"   Missing chars (first 20): {sorted(missing_tokens)[:20]}")
     
-    # Create extended vocab
-    new_vocab = sorted(pretrained_tokens | dataset_tokens)
+    # 🎯 CRITICAL FIX: For finetune, MUST use pretrained vocab ONLY
+    # Cannot add new tokens - would break checkpoint loading!
+    print(f"\n   ⚠️  FINETUNE MODE: Using pretrained vocab (no token extension)")
+    print(f"   📝 Pretrained vocab size: {len(pretrained_tokens)}")
     
-    # Save extended vocab
+    if missing_tokens:
+        print(f"\n   ⚠️  WARNING: {len(missing_tokens)} tokens in dataset not in pretrained vocab!")
+        print(f"      These will be treated as unknown tokens during training.")
+        print(f"      This is NORMAL for finetune - pretrained vocab must stay fixed.")
+        
+        if len(missing_tokens) > 50:
+            print(f"\n   ⚠️  CAUTION: Too many unknown tokens ({len(missing_tokens)})!")
+            print(f"      This may affect training quality.")
+            print(f"      Consider checking text normalization.")
+    
+    # Use pretrained vocab ONLY (required for checkpoint loading)
+    new_vocab = sorted(pretrained_tokens)
+    
+    # Save vocab (same as pretrained)
     new_vocab_path = Path(training_dir) / "vocab.txt"
     with open(new_vocab_path, 'w', encoding='utf-8') as f:
         for token in new_vocab:
             f.write(f"{token}\n")
     
-    print(f"   ✅ Extended vocab saved: {len(new_vocab)} tokens")
+    print(f"   ✅ Vocab saved: {len(new_vocab)} tokens (pretrained vocab)")
+    print(f"   ℹ️  Vocab size matches checkpoint: {len(new_vocab)} tokens")
     
     # 🔴 CRITICAL VALIDATION: Check vocab size
     if len(new_vocab) < 50:
@@ -394,7 +410,7 @@ for speaker in speakers:
             print(f"\n{'='*70}")
             print(f"❌ CRITICAL ERROR: raw.arrow file too small!")
             print(f"{'='*70}")
-            print(f"   Size: {arrow_size:.2f} MB (expected: >5 MB for 30 min audio)")
+            print(f"   Size: {arrow_size:.2f} MB")
             print(f"   This indicates feature extraction failed or no data.")
             print(f"{'='*70}")
             sys.exit(1)
@@ -471,13 +487,21 @@ print("✅ Model ready!")
     with open(pretrained_vocab_path, 'r', encoding='utf-8') as f:
         pretrained_vocab_size = len(f.readlines())
     
-    num_new_tokens = new_vocab_size - pretrained_vocab_size
-    
-    if num_new_tokens > 0:
-        print(f"   📝 Need to extend embedding: +{num_new_tokens} tokens")
-        # Note: We'll handle this in training script
+    # Validate vocab size matches (critical for checkpoint loading)
+    if new_vocab_size != pretrained_vocab_size:
+        print(f"\n{'='*70}")
+        print(f"❌ CRITICAL ERROR: Vocab size mismatch!")
+        print(f"{'='*70}")
+        print(f"   Training vocab: {new_vocab_size}")
+        print(f"   Pretrained vocab: {pretrained_vocab_size}")
+        print(f"   Difference: {new_vocab_size - pretrained_vocab_size} tokens")
+        print(f"\n   This will cause checkpoint loading to FAIL!")
+        print(f"   Please re-run Cell 08 with correct vocab handling.")
+        print(f"{'='*70}")
+        sys.exit(1)
     else:
-        print(f"   ✅ Vocab compatible, no extension needed")
+        print(f"   ✅ Vocab size matches pretrained: {new_vocab_size} tokens")
+        print(f"   ✅ Checkpoint will load successfully")
 
 # ------------------------------------------------------------------------------
 # 5. Update Configuration & Save to Drive

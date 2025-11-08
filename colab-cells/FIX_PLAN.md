@@ -191,7 +191,7 @@ if arrow_size < 0.1:
     print(f"\n{'='*70}")
     print(f"❌ CRITICAL ERROR: raw.arrow file too small!")
     print(f"{'='*70}")
-    print(f"   Size: {arrow_size:.2f} MB (expected: >5 MB for 30 min audio)")
+    print(f"   Size: {arrow_size:.2f} MB")
     print(f"   This indicates feature extraction failed or no data.")
     print(f"{'='*70}")
     sys.exit(1)

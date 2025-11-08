@@ -143,9 +143,18 @@ def convert_char_to_pinyin(text_list, polyphone=True):
     """
     
     final_text_list = []
-    custom_trans = str.maketrans(
-        {";": ",", """: '"', """: '"', "'": "'", "'": "'"}
-    )  # add custom trans here, to address oov
+    # Build translation table safely - only single characters
+    trans_dict = {
+        ";": ",",
+        "\u201c": '"',  # " LEFT DOUBLE QUOTATION MARK
+        "\u201d": '"',  # " RIGHT DOUBLE QUOTATION MARK
+        "\u2018": "'",  # ' LEFT SINGLE QUOTATION MARK
+        "\u2019": "'",  # ' RIGHT SINGLE QUOTATION MARK
+    }
+    
+    # Validate all keys are single characters
+    trans_dict = {k: v for k, v in trans_dict.items() if len(k) == 1}
+    custom_trans = str.maketrans(trans_dict)
 
     def is_chinese(c):
         return "\u3100" <= c <= "\u9fff"  # common chinese characters

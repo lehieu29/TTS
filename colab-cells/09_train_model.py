@@ -192,55 +192,54 @@ for speaker in speakers:
         print(f"   Please ensure Cell 08 completed successfully.")
         continue
     
-    # ✅ FIX: Verify arrow file integrity
+    # ✅ FIX: Verify arrow file integrity using Hugging Face Datasets API
     print(f"\n🔍 Verifying arrow file integrity...")
     try:
-        import pyarrow as pa
+        from datasets import Dataset
         
         arrow_path = f"{expected_data_dir}/raw.arrow"
         
-        # Try to open and read arrow file
-        with pa.ipc.open_file(arrow_path) as reader:
-            table = reader.read_all()
-            num_rows = len(table)
-            print(f"   ✅ Arrow file valid: {num_rows} rows")
+        # Load dataset using Hugging Face Datasets API
+        # This is the correct way to read files created by ArrowWriter
+        dataset = Dataset.from_file(arrow_path)
+        num_rows = len(dataset)
+        print(f"   ✅ Arrow file valid: {num_rows} rows")
+        
+        # Check column names
+        column_names = dataset.column_names
+        if 'audio_path' in column_names:
+            print(f"   ✅ Contains 'audio_path' column")
             
-            # Check column names
-            if 'audio_path' in table.column_names:
-                print(f"   ✅ Contains 'audio_path' column")
-                
-                # Check if audio paths exist (sample first 5)
-                audio_paths = table['audio_path'].to_pylist()
-                missing_audio = []
-                
-                for i, audio_path in enumerate(audio_paths[:5]):  # Check first 5
-                    # Handle both absolute and relative paths
-                    if os.path.isabs(audio_path):
-                        full_path = audio_path
-                    else:
-                        # Relative path - check in expected_data_dir
-                        full_path = os.path.join(expected_data_dir, audio_path)
-                    
-                    if not os.path.exists(full_path):
-                        missing_audio.append(audio_path)
-                
-                if missing_audio:
-                    print(f"   ⚠️  Some audio files not found (checked first 5):")
-                    for path in missing_audio[:3]:
-                        print(f"      - {path}")
-                    print(f"   💡 This may be OK if paths are relative to wavs/ directory")
+            # Check if audio paths exist (sample first 5)
+            audio_paths = dataset['audio_path'][:5]  # Get first 5
+            missing_audio = []
+            
+            for audio_path in audio_paths:
+                # Handle both absolute and relative paths
+                if os.path.isabs(audio_path):
+                    full_path = audio_path
                 else:
-                    print(f"   ✅ Audio paths verified (checked first 5)")
-            else:
-                print(f"   ⚠️  'audio_path' column not found in arrow file")
+                    # Relative path - check in expected_data_dir
+                    full_path = os.path.join(expected_data_dir, audio_path)
                 
-    except pa.lib.ArrowInvalid as e:
-        print(f"   ❌ Arrow file corrupted (invalid format): {e}")
-        print(f"   💡 Please re-run Cell 08 to regenerate dataset")
-        continue
+                if not os.path.exists(full_path):
+                    missing_audio.append(audio_path)
+            
+            if missing_audio:
+                print(f"   ⚠️  Some audio files not found (checked first 5):")
+                for path in missing_audio[:3]:
+                    print(f"      - {path}")
+                print(f"   💡 This may be OK if paths are relative to wavs/ directory")
+            else:
+                print(f"   ✅ Audio paths verified (checked first 5)")
+        else:
+            print(f"   ⚠️  'audio_path' column not found in arrow file")
+            print(f"   Available columns: {', '.join(column_names)}")
+                
     except Exception as e:
         print(f"   ❌ Arrow file verification failed: {e}")
         print(f"   💡 Please re-run Cell 08 to regenerate dataset")
+        print(f"   Error type: {type(e).__name__}")
         continue
     
     # Verify path resolution matches
