@@ -148,19 +148,38 @@ for speaker in speakers:
         missing_models.append(speaker)
 
 if missing_models:
-    print(f"\n⚠️  Loading missing models from Drive...")
-    for speaker in missing_models:
-        drive_checkpoint_path = f"{drive_checkpoints_dir}/{speaker}"
-        if os.path.exists(drive_checkpoint_path):
-            checkpoints = sorted(
-                Path(drive_checkpoint_path).glob("*.pt"),
-                key=lambda p: p.stat().st_mtime,
-                reverse=True
-            )
-            if checkpoints:
-                os.makedirs(f"{local_models_dir}/{speaker}", exist_ok=True)
-                shutil.copy(str(checkpoints[0]), f"{local_models_dir}/{speaker}/model.pt")
-                print(f"   ✅ Loaded {speaker}")
+    # Try to load from ckpts directory first (from recent training)
+    print(f"\n⚠️  Loading missing models from training checkpoints...")
+    for speaker in missing_models[:]:  # Use slice to allow removal during iteration
+        ckpt_path = f"/content/F5-TTS-Vietnamese/ckpts/{speaker}_training/model_last.pt"
+        if os.path.exists(ckpt_path):
+            training_dir = f"/content/data/{speaker}_training"
+            vocab_path = f"{training_dir}/vocab.txt"
+            
+            # Copy checkpoint and vocab to models directory
+            os.makedirs(f"{local_models_dir}/{speaker}", exist_ok=True)
+            shutil.copy(ckpt_path, f"{local_models_dir}/{speaker}/model.pt")
+            if os.path.exists(vocab_path):
+                shutil.copy(vocab_path, f"{local_models_dir}/{speaker}/vocab.txt")
+            
+            print(f"   ✅ Loaded {speaker} from training checkpoints")
+            missing_models.remove(speaker)
+    
+    # Try to load remaining missing models from Drive
+    if missing_models:
+        print(f"\n⚠️  Loading remaining models from Drive...")
+        for speaker in missing_models:
+            drive_checkpoint_path = f"{drive_checkpoints_dir}/{speaker}"
+            if os.path.exists(drive_checkpoint_path):
+                checkpoints = sorted(
+                    Path(drive_checkpoint_path).glob("*.pt"),
+                    key=lambda p: p.stat().st_mtime,
+                    reverse=True
+                )
+                if checkpoints:
+                    os.makedirs(f"{local_models_dir}/{speaker}", exist_ok=True)
+                    shutil.copy(str(checkpoints[0]), f"{local_models_dir}/{speaker}/model.pt")
+                    print(f"   ✅ Loaded {speaker} from Drive")
 
 # ------------------------------------------------------------------------------
 # 1. Prepare Speaker Data
@@ -226,8 +245,9 @@ def generate_speech(speaker_name, input_text, speed=1.0):
     speaker_info = speaker_data[speaker_name]
     
     # Output file
-    output_file = f"/content/outputs/{speaker_name}_{int(time.time())}.wav"
-    os.makedirs("/content/outputs", exist_ok=True)
+    output_dir = "/content/outputs"
+    os.makedirs(output_dir, exist_ok=True)
+    output_filename = f"{speaker_name}_{int(time.time())}.wav"
     
     # Inference command
     cmd = [
@@ -236,12 +256,16 @@ def generate_speech(speaker_name, input_text, speed=1.0):
         "--ref_audio", speaker_info['ref_audio'],
         "--ref_text", speaker_info['ref_text'],
         "--gen_text", input_text,
-        "--gen_file", output_file,
+        "--output_dir", output_dir,          # FIX: Correct output directory parameter
+        "--output_file", output_filename,     # FIX: Correct output filename parameter
         "--vocab_file", speaker_info['vocab_path'],
         "--ckpt_file", speaker_info['model_path'],
         "--speed", str(speed),
         "--nfe_step", "32"
     ]
+    
+    # Full output path for checking later
+    output_file = f"{output_dir}/{output_filename}"
     
     status_msg = f"🎙️ Generating speech for {speaker_name}...\n"
     status_msg += f"Text: {input_text[:50]}...\n"

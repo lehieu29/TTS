@@ -8,8 +8,7 @@ from importlib.resources import files
 import torch
 from torch.nn.utils.rnn import pad_sequence
 
-import jieba
-from pypinyin import lazy_pinyin, Style
+# Note: jieba and pypinyin imports removed - Chinese processing not needed for Vietnamese TTS
 
 
 # seed everything
@@ -131,19 +130,29 @@ def get_tokenizer(dataset_name, tokenizer: str = "pinyin"):
     return vocab_char_map, vocab_size
 
 
-# convert char to pinyin (with Vietnamese support)
+# convert text to character list (Vietnamese/English only)
 
 
 def convert_char_to_pinyin(text_list, polyphone=True):
     """
-    Convert text to character list, with support for:
-    - Chinese: Convert to Pinyin
-    - Vietnamese: Keep original characters with tones
-    - English/Other: Keep as-is
+    Convert text to character list for Vietnamese and English.
+    
+    SIMPLIFIED VERSION - Chinese/Pinyin processing removed.
+    Only supports:
+    - Vietnamese: Keep original characters with tones (có dấu or không dấu)
+    - English/Latin: Keep as-is
+    
+    Args:
+        text_list: List of text strings to process
+        polyphone: Unused parameter (kept for compatibility)
+    
+    Returns:
+        List of character lists
     """
     
     final_text_list = []
-    # Build translation table safely - only single characters
+    
+    # Normalize quotation marks and punctuation
     trans_dict = {
         ";": ",",
         "\u201c": '"',  # " LEFT DOUBLE QUOTATION MARK
@@ -156,66 +165,27 @@ def convert_char_to_pinyin(text_list, polyphone=True):
     trans_dict = {k: v for k, v in trans_dict.items() if len(k) == 1}
     custom_trans = str.maketrans(trans_dict)
 
-    def is_chinese(c):
-        return "\u3100" <= c <= "\u9fff"  # common chinese characters
-    
-    def is_vietnamese(c):
-        # Vietnamese characters with diacritics (tones)
-        # Unicode ranges for Vietnamese: Latin + Vietnamese Extensions
-        return (
-            ("\u0041" <= c <= "\u007A") or  # Basic Latin (a-z, A-Z)
-            ("\u00C0" <= c <= "\u00FF") or  # Latin-1 Supplement (À, Á, Â, Ã, etc.)
-            ("\u0100" <= c <= "\u017F") or  # Latin Extended-A (Ā, ă, etc.)
-            ("\u1E00" <= c <= "\u1EFF")     # Latin Extended Additional (Vietnamese tones: ạ, ả, ấ, etc.)
-        )
-    
-    def has_vietnamese_chars(text):
-        # Check if text contains Vietnamese diacritics
-        vietnamese_chars = "àáảãạâầấẩẫậăằắẳẵặèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ"
-        vietnamese_chars += vietnamese_chars.upper()
-        return any(c in vietnamese_chars for c in text)
-
     for text in text_list:
         char_list = []
+        
+        # Normalize punctuation
         text = text.translate(custom_trans)
         
-        # Check if text is Vietnamese
-        if has_vietnamese_chars(text):
-            # For Vietnamese: Keep original characters, split by spaces
-            words = text.split()
-            for i, word in enumerate(words):
-                # Add space before word (except first word)
-                if i > 0:
-                    char_list.append(" ")
-                # Add each character in the word
-                char_list.extend(list(word))
-        else:
-            # For Chinese/English: Use original jieba + pinyin logic
-            if jieba.dt.initialized is False:
-                jieba.default_logger.setLevel(50)  # CRITICAL
-                jieba.initialize()
+        # Vietnamese/Latin processing: Keep original characters, split by spaces
+        # Works for:
+        # - Vietnamese with diacritics: "xin chào" → ['x','i','n',' ','c','h','à','o']
+        # - Vietnamese without diacritics: "xin chao" → ['x','i','n',' ','c','h','a','o']
+        # - English: "hello world" → ['h','e','l','l','o',' ','w','o','r','l','d']
+        # - Mixed: "xin chào hello" → works fine
+        
+        words = text.split()
+        for i, word in enumerate(words):
+            # Add space before word (except first word)
+            if i > 0:
+                char_list.append(" ")
             
-            for seg in jieba.cut(text):
-                seg_byte_len = len(bytes(seg, "UTF-8"))
-                if seg_byte_len == len(seg):  # if pure alphabets and symbols
-                    if char_list and seg_byte_len > 1 and char_list[-1] not in " :'\"":
-                        char_list.append(" ")
-                    char_list.extend(seg)
-                elif polyphone and seg_byte_len == 3 * len(seg):  # if pure east asian characters
-                    seg_ = lazy_pinyin(seg, style=Style.TONE3, tone_sandhi=True)
-                    for i, c in enumerate(seg):
-                        if is_chinese(c):
-                            char_list.append(" ")
-                        char_list.append(seg_[i])
-                else:  # if mixed characters, alphabets and symbols
-                    for c in seg:
-                        if ord(c) < 256:
-                            char_list.extend(c)
-                        elif is_chinese(c):
-                            char_list.append(" ")
-                            char_list.extend(lazy_pinyin(c, style=Style.TONE3, tone_sandhi=True))
-                        else:
-                            char_list.append(c)
+            # Add each character in the word
+            char_list.extend(list(word))
         
         final_text_list.append(char_list)
 

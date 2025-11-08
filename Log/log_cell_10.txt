@@ -1,0 +1,70 @@
+🎤 Testing Trained Model...
+
+======================================================================
+🔍 Checking for trained models...
+======================================================================
+✅ Found 1 trained speaker(s) in config
+
+⚠️  WARNING: Some models missing locally:
+   - Podcast_Thuan(3)
+
+   Attempting to load from Drive...
+
+======================================================================
+👤 Available Trained Speakers:
+======================================================================
+   1. Podcast_Thuan(3) ❌ (model not found)
+
+✅ Using: Podcast_Thuan(3)
+
+======================================================================
+🎧 Preparing Reference Audio...
+======================================================================
+📁 Available reference audio:
+   1. #54： tiền ｜Thuần Podcast_vocals_seg0044.wav
+   2. Podcast 38： thanh xuân của ai không mơ hồ？｜ Thuần Podcast_vocals_seg0173.wav
+   3. #52： vạch xuất phát｜ Thuần Podcast_vocals_seg0193.wav
+   4. #56： mây trên đồng bay mãi｜ Thuần Podcast_vocals_seg0023.wav
+   5. #52： vạch xuất phát｜ Thuần Podcast_vocals_seg0181.wav
+
+✅ Using reference: #54： tiền ｜Thuần Podcast_vocals_seg0044.wav
+   Reference text: "mình tham gia vào cơ lực bộ âm nhạc của trường. mình làm lớp phó văn thể trong lớp. ở trường của tụi mình thì mỗi năm thì"
+
+======================================================================
+✍️  Text to Generate:
+======================================================================
+
+📝 Example texts:
+   1. xin chào các bạn, hôm nay tôi sẽ giới thiệu về trí tuệ nhân tạo
+   2. việt nam là một đất nước xinh đẹp với văn hóa phong phú
+   3. công nghệ đang phát triển rất nhanh trong những năm gần đây
+   4. tôi rất vui được chia sẻ kiến thức với mọi người
+
+💡 Or enter your own Vietnamese text:
+Enter text (or number 1-4, or Enter for example 1): 1
+
+✅ Generating: "xin chào các bạn, hôm nay tôi sẽ giới thiệu về trí tuệ nhân tạo"
+
+======================================================================
+🎙️  Generating Speech...
+======================================================================
+⏳ Generating... (this may take 5-10 seconds)
+
+❌ Inference failed!
+/content/venv/lib/python3.12/site-packages/jieba/_compat.py:18: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/content/F5-TTS-Vietnamese/src/f5_tts/infer/infer_cli.py", line 222, in <module>
+    gen_text = codecs.open(gen_file, "r", "utf-8").read()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<frozen codecs>", line 918, in open
+FileNotFoundError: [Errno 2] No such file or directory: '/content/outputs/Podcast_Thuan(3)_generated.wav'
+
+An exception has occurred, use %tb to see the full traceback.
+
+SystemExit: 1
+
+/usr/local/lib/python3.12/dist-packages/IPython/core/interactiveshell.py:3561: UserWarning: To exit: use 'exit', 'quit', or Ctrl-D.
+  warn("To exit: use 'exit', 'quit', or Ctrl-D.", stacklevel=1)

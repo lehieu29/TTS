@@ -119,7 +119,7 @@ for speaker in speakers:
     
     dataset_name = f"{speaker}_training"
     training_dir = training_dirs[speaker]
-    ckpt_dir = f"/content/ckpts/{dataset_name}"
+    ckpt_dir = f"/content/F5-TTS-Vietnamese/ckpts/{dataset_name}"  # FIX: Use correct checkpoint path
     
     # ✅ FIX: Verify required files exist
     print(f"\n📋 Verifying training data...")
