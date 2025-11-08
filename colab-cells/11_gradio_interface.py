@@ -30,15 +30,137 @@ config_path = "/content/processing_config.json"
 with open(config_path, 'r') as f:
     config = json.load(f)
 
-speakers = config.get('trained_speakers', [])
-
-if not speakers:
-    print("❌ No trained speakers found!")
-    print("   Please train a model first (Cell 09)")
-    sys.exit(1)
-
 # Change to F5-TTS directory
 os.chdir("/content/F5-TTS-Vietnamese")
+
+# ------------------------------------------------------------------------------
+# 0. Auto-Load Checkpoints from Drive
+# ------------------------------------------------------------------------------
+print("\n" + "="*70)
+print("🔍 Checking for trained models...")
+print("="*70)
+
+import shutil
+
+drive_checkpoints_dir = "/content/drive/MyDrive/F5TTS_Vietnamese/checkpoints"
+local_models_dir = "/content/models"
+
+# Check if we have trained_speakers in config or checkpoints in Drive
+trained_speakers = config.get('trained_speakers', [])
+
+# If no trained_speakers but we have checkpoints in Drive, auto-load them
+if not trained_speakers and os.path.exists(drive_checkpoints_dir):
+    print("📝 No local models found. Checking Drive for checkpoints...")
+    
+    # List speakers with checkpoints in Drive
+    drive_speakers = []
+    for speaker_dir in os.listdir(drive_checkpoints_dir):
+        speaker_path = os.path.join(drive_checkpoints_dir, speaker_dir)
+        if os.path.isdir(speaker_path):
+            checkpoints = list(Path(speaker_path).glob("*.pt"))
+            if checkpoints:
+                drive_speakers.append(speaker_dir)
+    
+    if drive_speakers:
+        print(f"✅ Found checkpoints in Drive for {len(drive_speakers)} speaker(s)")
+        print(f"   Auto-loading checkpoints for Gradio interface...")
+        
+        os.makedirs(local_models_dir, exist_ok=True)
+        loaded_speakers = []
+        
+        for speaker in drive_speakers:
+            speaker_checkpoint_dir = os.path.join(drive_checkpoints_dir, speaker)
+            speaker_model_dir = os.path.join(local_models_dir, speaker)
+            
+            # Find latest checkpoint
+            checkpoints = sorted(
+                Path(speaker_checkpoint_dir).glob("*.pt"),
+                key=lambda p: p.stat().st_mtime,
+                reverse=True
+            )
+            
+            if checkpoints:
+                latest_checkpoint = checkpoints[0]
+                os.makedirs(speaker_model_dir, exist_ok=True)
+                
+                # Copy checkpoint as model.pt
+                dest_model = os.path.join(speaker_model_dir, "model.pt")
+                print(f"⏳ Loading {speaker}: {latest_checkpoint.name}...")
+                shutil.copy(str(latest_checkpoint), dest_model)
+                
+                # Restore training data for vocab and reference audio
+                training_dir = f"/content/data/{speaker}_training"
+                if not os.path.exists(training_dir):
+                    drive_training_backup = f"/content/drive/MyDrive/F5TTS_Vietnamese/training_data/{speaker}_training"
+                    if os.path.exists(drive_training_backup):
+                        print(f"   Restoring training data...")
+                        os.makedirs(training_dir, exist_ok=True)
+                        
+                        # Copy vocab.txt
+                        vocab_src = os.path.join(drive_training_backup, "vocab.txt")
+                        if os.path.exists(vocab_src):
+                            shutil.copy(vocab_src, training_dir)
+                        
+                        # Copy wavs directory
+                        wavs_src = os.path.join(drive_training_backup, "wavs")
+                        wavs_dst = os.path.join(training_dir, "wavs")
+                        if os.path.exists(wavs_src):
+                            shutil.copytree(wavs_src, wavs_dst)
+                
+                # Copy vocab.txt to model dir
+                vocab_src = os.path.join(training_dir, "vocab.txt")
+                vocab_dst = os.path.join(speaker_model_dir, "vocab.txt")
+                if os.path.exists(vocab_src):
+                    shutil.copy(vocab_src, vocab_dst)
+                
+                print(f"   ✅ Loaded: {speaker}")
+                loaded_speakers.append(speaker)
+        
+        # Update config
+        config['trained_speakers'] = loaded_speakers
+        config['training_complete'] = True
+        
+        with open(config_path, 'w') as f:
+            json.dump(config, f, indent=2)
+        
+        trained_speakers = loaded_speakers
+        print(f"\n✅ Loaded {len(loaded_speakers)} model(s) from Drive")
+    else:
+        print("❌ No checkpoints found in Drive!")
+        print("   Please train a model first (Cell 09)")
+        sys.exit(1)
+
+elif not trained_speakers:
+    print("❌ No trained models found!")
+    print("   Please run Cell 09 to train a model first")
+    print("   Or check if checkpoints exist in Drive")
+    sys.exit(1)
+else:
+    print(f"✅ Found {len(trained_speakers)} trained speaker(s) in config")
+
+speakers = trained_speakers
+
+# Final check: verify models exist locally
+missing_models = []
+for speaker in speakers:
+    model_path = f"{local_models_dir}/{speaker}/model.pt"
+    if not os.path.exists(model_path):
+        missing_models.append(speaker)
+
+if missing_models:
+    print(f"\n⚠️  Loading missing models from Drive...")
+    for speaker in missing_models:
+        drive_checkpoint_path = f"{drive_checkpoints_dir}/{speaker}"
+        if os.path.exists(drive_checkpoint_path):
+            checkpoints = sorted(
+                Path(drive_checkpoint_path).glob("*.pt"),
+                key=lambda p: p.stat().st_mtime,
+                reverse=True
+            )
+            if checkpoints:
+                os.makedirs(f"{local_models_dir}/{speaker}", exist_ok=True)
+                shutil.copy(str(checkpoints[0]), f"{local_models_dir}/{speaker}/model.pt")
+                print(f"   ✅ Loaded {speaker}")
 
 # ------------------------------------------------------------------------------
 # 1. Prepare Speaker Data

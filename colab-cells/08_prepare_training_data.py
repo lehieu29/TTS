@@ -32,6 +32,166 @@ with open(config_path, 'r') as f:
 os.chdir("/content/F5-TTS-Vietnamese")
 
 # ------------------------------------------------------------------------------
+# 0. Check for Existing Training Data in Drive
+# ------------------------------------------------------------------------------
+print("\n" + "="*70)
+print("🔍 Checking for existing training data in Drive...")
+print("="*70)
+
+drive_training_backup = "/content/drive/MyDrive/F5TTS_Vietnamese/training_data"
+use_backup = False
+
+# Check if training data exists in Drive
+if os.path.exists(drive_training_backup) and config.get('transcriptions'):
+    # List speakers in backup
+    backup_speakers = [d for d in os.listdir(drive_training_backup) 
+                      if os.path.isdir(os.path.join(drive_training_backup, d)) 
+                      and d.endswith('_training')]
+    
+    if backup_speakers:
+        print(f"✅ Found training data backup in Drive!")
+        print(f"📊 Backup info:")
+        print(f"   Speakers: {len(backup_speakers)}")
+        
+        # Check if backup has required files
+        complete_backup = True
+        for speaker_dir in backup_speakers:
+            backup_path = os.path.join(drive_training_backup, speaker_dir)
+            required_files = ['metadata.csv', 'vocab.txt', 'raw.arrow', 'duration.json']
+            
+            for req_file in required_files:
+                if not os.path.exists(os.path.join(backup_path, req_file)):
+                    print(f"   ⚠️  Missing {req_file} in {speaker_dir}")
+                    complete_backup = False
+        
+        if complete_backup:
+            print(f"   Status: ✅ Complete")
+            print()
+            print("="*70)
+            print("💬 Bạn muốn sử dụng training data backup hay chuẩn bị lại?")
+            print("="*70)
+            print("   1. Sử dụng backup từ Drive (nhanh, tiết kiệm thời gian)")
+            print("   2. Chuẩn bị lại training data (sẽ ghi đè backup cũ)")
+            print("="*70)
+            
+            user_choice = input("Lựa chọn của bạn (1/2, mặc định=1): ").strip()
+            
+            if user_choice == "2":
+                print("\n✅ Sẽ chuẩn bị lại training data...")
+                use_backup = False
+            else:
+                print("\n✅ Sử dụng training data backup từ Drive...")
+                use_backup = True
+        else:
+            print("   Status: ⚠️  Incomplete backup. Will prepare new data...")
+            use_backup = False
+    else:
+        print("📝 Backup folder exists but empty. Will prepare new data...")
+        use_backup = False
+else:
+    print("📝 No training data backup found. Will prepare new data...")
+    use_backup = False
+
+# ------------------------------------------------------------------------------
+# Restore from backup if user chose to
+# ------------------------------------------------------------------------------
+if use_backup:
+    print("\n" + "="*70)
+    print("📦 Restoring training data from Drive backup...")
+    print("="*70)
+    
+    # Create local data directory
+    local_data_dir = "/content/data"
+    os.makedirs(local_data_dir, exist_ok=True)
+    
+    # Copy each speaker's training data
+    backup_speakers = [d for d in os.listdir(drive_training_backup) 
+                      if os.path.isdir(os.path.join(drive_training_backup, d))]
+    
+    training_dirs = {}
+    speakers_list = []
+    
+    for speaker_dir in backup_speakers:
+        backup_path = os.path.join(drive_training_backup, speaker_dir)
+        local_path = os.path.join(local_data_dir, speaker_dir)
+        
+        print(f"⏳ Copying {speaker_dir}...")
+        
+        # Remove old local data if exists
+        if os.path.exists(local_path):
+            shutil.rmtree(local_path)
+        
+        # Copy entire directory
+        shutil.copytree(backup_path, local_path)
+        
+        # Extract speaker name (remove _training suffix)
+        speaker_name = speaker_dir.replace('_training', '')
+        speakers_list.append(speaker_name)
+        training_dirs[speaker_name] = local_path
+        
+        print(f"   ✅ Restored to: {local_path}")
+    
+    # Update config
+    config['training_dirs'] = training_dirs
+    config['speakers_list'] = speakers_list
+    config['ready_for_training'] = True
+    
+    # Save config
+    with open(config_path, 'w') as f:
+        json.dump(config, f, indent=2)
+    
+    # Backup to Drive
+    drive_config = "/content/drive/MyDrive/F5TTS_Vietnamese/processing_config.json"
+    with open(drive_config, 'w') as f:
+        json.dump(config, f, indent=2)
+    
+    print(f"\n✅ Restored training data for {len(speakers_list)} speaker(s)")
+    
+    # Display summary
+    print("\n" + "="*70)
+    print("📊 Restored Training Data Summary:")
+    print("="*70)
+    
+    for speaker in speakers_list:
+        training_dir = training_dirs[speaker]
+        
+        # Count files
+        wav_count = len(list(Path(training_dir).glob("wavs/*.wav")))
+        
+        # Get duration if available
+        duration_file = os.path.join(training_dir, "duration.json")
+        if os.path.exists(duration_file):
+            with open(duration_file, 'r') as f:
+                duration_data = json.load(f)
+                total_duration = sum(duration_data['duration']) / 60  # minutes
+        else:
+            total_duration = 0
+        
+        # Get vocab size
+        vocab_file = os.path.join(training_dir, "vocab.txt")
+        if os.path.exists(vocab_file):
+            with open(vocab_file, 'r') as f:
+                vocab_size = len(f.readlines())
+        else:
+            vocab_size = 0
+        
+        print(f"\n   {speaker}:")
+        print(f"      Audio files: {wav_count}")
+        print(f"      Duration: {total_duration:.1f} minutes")
+        print(f"      Vocab size: {vocab_size}")
+        print(f"      Location: {training_dir}")
+    
+    print("\n" + "="*70)
+    print("✅ RESTORE COMPLETE! Ready for training...")
+    print("="*70)
+    print("📝 Next Steps:")
+    print("   → Run Cell 09 to start training!")
+    print("="*70)
+    
+    # Skip the rest of this cell
+    sys.exit(0)
+
+# ------------------------------------------------------------------------------
 # 1. Organize Data Structure
 # ------------------------------------------------------------------------------
 print("\n" + "="*70)

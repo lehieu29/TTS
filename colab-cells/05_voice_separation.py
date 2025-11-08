@@ -36,6 +36,147 @@ audio_files = [Path(p) for p in config['audio_files']]
 speakers = config['speakers']
 
 # ------------------------------------------------------------------------------
+# 0. Check for Existing Separated Vocals in Drive
+# ------------------------------------------------------------------------------
+print("\n" + "="*70)
+print("🔍 Checking for existing separated vocals in Drive...")
+print("="*70)
+
+import shutil
+
+drive_vocals_backup = "/content/drive/MyDrive/F5TTS_Vietnamese/vocals_backup"
+use_backup = False
+
+# Check if there are separated files in current config and in Drive backup
+if config.get('separated', False) and os.path.exists(drive_vocals_backup):
+    # Check if backup has files
+    backup_files = []
+    for root, dirs, files in os.walk(drive_vocals_backup):
+        backup_files.extend([f for f in files if f.endswith('.wav')])
+    
+    if backup_files:
+        print(f"✅ Found separated vocals backup in Drive!")
+        print(f"📊 Backup info:")
+        print(f"   Files: {len(backup_files)}")
+        
+        # Calculate size
+        backup_size = sum(
+            os.path.getsize(os.path.join(root, f))
+            for root, dirs, files in os.walk(drive_vocals_backup)
+            for f in files
+        ) / (1024 * 1024)  # MB
+        
+        print(f"   Size: {backup_size:.1f} MB")
+        print()
+        print("="*70)
+        print("💬 Bạn muốn sử dụng separated vocals backup hay tách lại?")
+        print("="*70)
+        print("   1. Sử dụng backup từ Drive (nhanh, tiết kiệm thời gian)")
+        print("   2. Chạy lại voice separation (sẽ ghi đè backup cũ)")
+        print("   3. Skip voice separation (dùng audio gốc)")
+        print("="*70)
+        
+        user_choice = input("Lựa chọn của bạn (1/2/3, mặc định=1): ").strip()
+        
+        if user_choice == "2":
+            print("\n✅ Sẽ chạy lại voice separation...")
+            use_backup = False
+        elif user_choice == "3":
+            print("\n✅ Skip voice separation, dùng audio gốc...")
+            config['vocals_dir'] = config['upload_dir']
+            config['separated'] = False
+            
+            with open(config_path, 'w') as f:
+                json.dump(config, f, indent=2)
+            
+            print("\n🎉 Proceeding to next step...")
+            sys.exit(0)
+        else:
+            print("\n✅ Sử dụng separated vocals backup từ Drive...")
+            use_backup = True
+    else:
+        print("📝 Backup folder exists but empty. Will run separation...")
+        use_backup = False
+else:
+    print("📝 No separated vocals backup found. Will run separation...")
+    use_backup = False
+
+# ------------------------------------------------------------------------------
+# Restore from backup if user chose to
+# ------------------------------------------------------------------------------
+if use_backup:
+    print("\n" + "="*70)
+    print("📦 Restoring separated vocals from Drive backup...")
+    print("="*70)
+    
+    # Create local vocals directory
+    vocals_dir = "/content/processed/vocals"
+    os.makedirs(vocals_dir, exist_ok=True)
+    
+    # Copy all files from backup
+    print("⏳ Copying separated vocals from Drive...")
+    
+    # Remove old local vocals if exists
+    if os.path.exists(vocals_dir):
+        shutil.rmtree(vocals_dir)
+    
+    # Copy entire backup directory
+    shutil.copytree(drive_vocals_backup, vocals_dir)
+    
+    # Update config with local paths
+    separated_files = {}
+    for root, dirs, files in os.walk(vocals_dir):
+        for f in files:
+            if f.endswith('_vocals.wav'):
+                vocals_path = os.path.join(root, f)
+                # Try to match with original audio file
+                base_name = f.replace('_vocals.wav', '')
+                for audio_path in config['audio_files']:
+                    if Path(audio_path).stem == base_name:
+                        separated_files[audio_path] = vocals_path
+                        break
+    
+    # Update config
+    config['vocals_dir'] = vocals_dir
+    config['separated_files'] = separated_files
+    config['separated'] = True
+    
+    # Save config
+    with open(config_path, 'w') as f:
+        json.dump(config, f, indent=2)
+    
+    # Backup to Drive
+    drive_config = "/content/drive/MyDrive/F5TTS_Vietnamese/processing_config.json"
+    with open(drive_config, 'w') as f:
+        json.dump(config, f, indent=2)
+    
+    print(f"✅ Restored {len(separated_files)} separated vocals files")
+    print(f"📁 Location: {vocals_dir}")
+    
+    # Display summary
+    print("\n" + "="*70)
+    print("📊 Restored Separated Vocals Summary:")
+    print("="*70)
+    
+    for original, vocals in list(separated_files.items())[:5]:
+        print(f"   {Path(original).name}")
+        print(f"   → {Path(vocals).name}")
+        print()
+    
+    if len(separated_files) > 5:
+        print(f"   ... and {len(separated_files) - 5} more")
+    
+    print("\n" + "="*70)
+    print("✅ RESTORE COMPLETE! Skipping to next cell...")
+    print("="*70)
+    print("📝 Next Steps:")
+    print("   → Run Cell 06 to detect speech segments (VAD)")
+    print("="*70)
+    
+    # Skip the rest of this cell
+    sys.exit(0)
+
+# ------------------------------------------------------------------------------
 # 1. User Choice: Separate or Skip
 # ------------------------------------------------------------------------------
 print("\n" + "="*70)
@@ -184,6 +325,36 @@ with open(drive_config, 'w') as f:
     json.dump(config, f, indent=2)
 
 print(f"✅ Configuration updated")
+
+# ------------------------------------------------------------------------------
+# 4.5. Backup Separated Vocals to Drive
+# ------------------------------------------------------------------------------
+print("\n" + "="*70)
+print("💾 Backing up separated vocals to Drive...")
+print("="*70)
+
+drive_vocals_backup = "/content/drive/MyDrive/F5TTS_Vietnamese/vocals_backup"
+
+# Remove old backup if exists
+if os.path.exists(drive_vocals_backup):
+    print("⏳ Removing old backup...")
+    shutil.rmtree(drive_vocals_backup)
+
+# Copy vocals to Drive
+print("⏳ Copying separated vocals to Drive...")
+shutil.copytree(vocals_dir, drive_vocals_backup)
+
+# Calculate backup size
+backup_size = sum(
+    os.path.getsize(os.path.join(dirpath, filename))
+    for dirpath, dirnames, filenames in os.walk(drive_vocals_backup)
+    for filename in filenames
+) / (1024 * 1024)  # MB
+
+print(f"✅ Backup complete!")
+print(f"   Location: {drive_vocals_backup}")
+print(f"   Files: {len(separated_files)}")
+print(f"   Size: {backup_size:.1f} MB")
 
 # ------------------------------------------------------------------------------
 # 5. Display Summary
